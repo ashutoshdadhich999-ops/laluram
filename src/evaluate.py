@@ -1,15 +1,5 @@
 """
-Evaluation utilities.
-
-Fixes applied vs. the original script:
-  1. Spiking vs non-spiking models are now evaluated on the SAME corrupted
-     batches (same RNG seed / same noise draw) instead of independently
-     sampled noise. This makes the comparison a fair, paired one instead
-     of comparing two different noise realizations.
-  2. `measure_sparsity` / `measure_time` now feed the model the *corrupted*
-     ("noisy") signal it was actually trained on, instead of the clean
-     waveform. The original script accidentally measured spike-rate and
-     latency on an out-of-distribution input.
+Evaluation, Sparsity, Latency, and Encoding Ablation utilities.
 """
 
 import time
@@ -22,8 +12,6 @@ from tqdm import tqdm
 from src.diffusion_audio import poison
 from src.metrics import si_sdr, snr_fn, safe_mean
 
-
-# ---------------------------------------------------------------- image ----
 
 def eval_img(model, name, test_loader, diff, timesteps, device, seed=None):
     if seed is not None:
@@ -54,15 +42,12 @@ def eval_img(model, name, test_loader, diff, timesteps, device, seed=None):
 
 def eval_img_pair(model_a, model_b, name_a, name_b, test_loader, diff, timesteps,
                    device, seed=42):
-    """Evaluate two image models on matched noise draws for a fair comparison."""
     res_a = eval_img(model_a, name_a, test_loader, diff, timesteps, device, seed=seed)
     res_b = eval_img(model_b, name_b, test_loader, diff, timesteps, device, seed=seed)
     return res_a, res_b
 
 
-# ---------------------------------------------------------------- audio ----
-
-def evaluate_audio(model, name, test_loader, T_audio, max_rate, device, seed=None):
+def evaluate_audio(model, name, test_loader, T_audio, max_rate, device, seed=None, mode="poisson"):
     if seed is not None:
         torch.manual_seed(seed)
     model.eval()
@@ -71,7 +56,7 @@ def evaluate_audio(model, name, test_loader, T_audio, max_rate, device, seed=Non
         for x0 in tqdm(test_loader, desc=f"Eval {name}", leave=False):
             x0 = x0.to(device)
             t = torch.randint(T_audio // 3, T_audio, (x0.size(0),), device=device)
-            noisy, _ = poison(x0, t, T_audio, max_rate, device)
+            noisy, _ = poison(x0, t, T_audio, max_rate, device, mode=mode)
             pred = model(noisy, t)
             den = (noisy - pred).clamp(0, 1)
 
@@ -96,18 +81,13 @@ def evaluate_audio(model, name, test_loader, T_audio, max_rate, device, seed=Non
 
 
 def evaluate_audio_pair(model_a, model_b, name_a, name_b, test_loader, T_audio,
-                         max_rate, device, seed=42):
-    """Evaluate two audio models on matched noise draws for a fair comparison."""
-    res_a = evaluate_audio(model_a, name_a, test_loader, T_audio, max_rate, device, seed=seed)
-    res_b = evaluate_audio(model_b, name_b, test_loader, T_audio, max_rate, device, seed=seed)
+                         max_rate, device, seed=42, mode="poisson"):
+    res_a = evaluate_audio(model_a, name_a, test_loader, T_audio, max_rate, device, seed=seed, mode=mode)
+    res_b = evaluate_audio(model_b, name_b, test_loader, T_audio, max_rate, device, seed=seed, mode=mode)
     return res_a, res_b
 
 
-# ------------------------------------------------------- sparsity / timing --
-
 def measure_sparsity(model, test_loader, T_audio, max_rate, device, batches: int = 8):
-    """Spike rate of a spiking audio model, measured on realistic (corrupted)
-    input -- i.e. the same distribution the model sees during actual denoising."""
     model.eval()
     total_spikes = total_elements = 0.0
     spike_buffers = []
@@ -123,7 +103,7 @@ def measure_sparsity(model, test_loader, T_audio, max_rate, device, batches: int
                 break
             x0 = x0.to(device)
             t = torch.randint(0, T_audio, (x0.size(0),), device=device)
-            noisy, _ = poison(x0, t, T_audio, max_rate, device)  # FIX: use noisy input
+            noisy, _ = poison(x0, t, T_audio, max_rate, device)
             spike_buffers.clear()
             _ = model(noisy, t)
             for spk in spike_buffers:
@@ -138,9 +118,6 @@ def measure_sparsity(model, test_loader, T_audio, max_rate, device, batches: int
 
 def measure_time(model_spiking, model_nonspiking, test_loader, T_audio, max_rate,
                   device, batches: int = 10, warmup: int = 3):
-    """Latency of both audio models on the SAME realistic (corrupted) inputs,
-    so the comparison isn't skewed by different input distributions."""
-
     def _time_one(model):
         model.eval()
         times = []
@@ -150,7 +127,7 @@ def measure_time(model_spiking, model_nonspiking, test_loader, T_audio, max_rate
                     break
                 x0 = x0.to(device)
                 t = torch.randint(0, T_audio, (x0.size(0),), device=device)
-                noisy, _ = poison(x0, t, T_audio, max_rate, device)  # FIX: use noisy input
+                noisy, _ = poison(x0, t, T_audio, max_rate, device)
 
                 if i < warmup:
                     _ = model(noisy, t)
