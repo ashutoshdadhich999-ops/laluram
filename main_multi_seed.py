@@ -8,6 +8,7 @@ import torchaudio
 from src.datasets import AudioDS
 from src.diffusion_audio import PoissonAudioDiffusion
 from src.models_audio import StrongAudioNet, NonSpikeAudioNet
+from src.energy_analysis import calculate_hardware_energy
 
 def evaluate_audio(model, test_loader, diff):
     model.eval()
@@ -44,6 +45,7 @@ def main():
     diff = PoissonAudioDiffusion(T=40, device=device)
     
     snn_scores, ann_scores = [], []
+    snn_ref, ann_ref = None, None
 
     for seed in args.seeds:
         print(f"\n--- Running Seed {seed} ---")
@@ -78,12 +80,15 @@ def main():
 
         snn_scores.append(evaluate_audio(snn, test_loader, diff))
         ann_scores.append(evaluate_audio(ann, test_loader, diff))
+        snn_ref, ann_ref = snn, ann
 
     print("\n" + "=" * 60)
     print("FINAL MULTI-SEED RESULTS")
     print("=" * 60)
     print(f"SNN SI-SDR Imp : {np.mean(snn_scores):.2f} ± {np.std(snn_scores):.2f} dB")
     print(f"ANN SI-SDR Imp : {np.mean(ann_scores):.2f} ± {np.std(ann_scores):.2f} dB")
+    
+    calculate_hardware_energy(snn_ref, ann_ref, None)
 
 if __name__ == "__main__":
     main()
