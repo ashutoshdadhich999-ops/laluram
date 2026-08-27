@@ -1,41 +1,39 @@
+"""
+Forward Poisson Diffusion Process & Noise Corruption Engines.
+Simulates discrete Markov Poisson jump transition dynamics: q(x_t | x_{t-1})
+"""
+
 import torch
-import torch.nn as nn
 
-class PoissonAudioDiffusion:
-    def __init__(self, T: int = 40, scale: float = 20.0, decay: float = 0.05, device: str = "cuda"):
-        self.T = T
-        self.scale = scale
-        self.decay = decay
-        self.device = device
-        self.t_steps = torch.linspace(0, 1, T, device=device)
-        self.gamma = torch.exp(-decay * self.t_steps * 6.0)
-
-    def q_sample(self, x0: torch.Tensor, t: torch.Tensor, mode: str = "poisson"):
-        t_normalized = (t.float() / self.T).unsqueeze(-1)
-        gamma_t = torch.exp(-self.decay * t_normalized * 6.0).to(self.device)
-        
-        if mode == "poisson":
-            rate = torch.clamp(x0 * gamma_t * self.scale, min=1e-4)
-            counts = torch.poisson(rate)
-            x_t = counts / self.scale
-            jitter = torch.randn_like(x_t) * 0.02 * (1.0 - gamma_t)
-            x_t = torch.clamp(x_t + jitter, 0.0, 1.0)
-            
-        elif mode == "gaussian":
-            noise = torch.randn_like(x0)
-            x_t = torch.clamp(gamma_t * x0 + (1 - gamma_t) * noise, 0.0, 1.0)
-            
-        elif mode == "bernoulli":
-            prob = torch.clamp(x0 * gamma_t, 0.0, 1.0)
-            x_t = torch.bernoulli(prob)
-            
-        else:
-            raise ValueError(f"Unknown encoding mode: {mode}")
-
-        target_noise = x_t - x0
-        return x_t, target_noise
 
 def poison(x0: torch.Tensor, t: torch.Tensor, T_audio: int, max_rate: float,
-           device: str, scale: float = 20.0, decay: float = 0.05, jitter_std: float = 0.02):
-    diff = PoissonAudioDiffusion(T=T_audio, scale=scale, decay=decay, device=device)
-    return diff.q_sample(x0, t, mode="poisson")
+           device: str, scale: float = 15.0, decay: float = 0.06,
+           jitter_std: float = 0.05, mode: str = "poisson"):
+    """
+    Corrupt a clean waveform batch `x0` at diffusion step `t` using specified noise dynamics.
+    Modes:
+      - 'poisson': Continuous Poisson jump noise process (Default)
+      - 'gaussian': Standard additive Gaussian diffusion noise
+      - 'bernoulli': Bernoulli spike probability degradation
+    """
+    t_flat = t.view(-1, 1).float().to(device)
+    gamma = torch.exp(-decay * t_flat * 6 / T_audio)
+
+    if mode == "poisson":
+        rate = x0 * gamma * max_rate
+        rate = torch.clamp(rate, min=1e-4, max=max_rate)
+        counts = torch.poisson(rate * scale)
+        noisy = counts / scale
+        noisy = noisy + torch.randn_like(noisy) * jitter_std * (1 - gamma)
+    elif mode == "gaussian":
+        sigma = (1.0 - gamma)
+        noisy = x0 + torch.randn_like(x0) * sigma
+    elif mode == "bernoulli":
+        p = torch.clamp(x0 * gamma, 0.001, 0.999)
+        spikes = torch.bernoulli(p)
+        noisy = spikes + torch.randn_like(spikes) * jitter_std
+    else:
+        raise ValueError(f"Unknown corruption mode: {mode}")
+
+    noisy = noisy.clamp(0, 1)
+    return noisy, noisy - x0
