@@ -12,8 +12,6 @@ class PoissonAudioDiffusion:
         self.scale = scale
         self.decay = decay
         self.device = device
-        
-        # Precompute variance decay schedule (Continuous SDE inspired)
         self.t_steps = torch.linspace(0, 1, T, device=device)
         self.gamma = torch.exp(-decay * self.t_steps * 6.0)
 
@@ -26,10 +24,8 @@ class PoissonAudioDiffusion:
         
         if mode == "poisson":
             rate = torch.clamp(x0 * gamma_t * self.scale, min=1e-4)
-            # Poisson jump distribution sample: q(x_t | x_0)
             counts = torch.poisson(rate)
             x_t = counts / self.scale
-            # Continuous relaxation jitter for smooth backprop targets
             jitter = torch.randn_like(x_t) * 0.02 * (1.0 - gamma_t)
             x_t = torch.clamp(x_t + jitter, 0.0, 1.0)
             
@@ -46,3 +42,13 @@ class PoissonAudioDiffusion:
 
         target_noise = x_t - x0
         return x_t, target_noise
+
+
+def poison(x0: torch.Tensor, t: torch.Tensor, T_audio: int, max_rate: float,
+           device: str, scale: float = 20.0, decay: float = 0.05, jitter_std: float = 0.02):
+    """
+    Wrapper function to maintain backward compatibility with legacy scripts
+    expecting the 'poison' module import.
+    """
+    diff = PoissonAudioDiffusion(T=T_audio, scale=scale, decay=decay, device=device)
+    return diff.q_sample(x0, t, mode="poisson")
