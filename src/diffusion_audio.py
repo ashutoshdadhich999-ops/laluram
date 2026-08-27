@@ -2,11 +2,6 @@ import torch
 import torch.nn as nn
 
 class PoissonAudioDiffusion:
-    """
-    Continuous Poisson-Inspired State-Space Diffusion Process.
-    Transition Kernel: q(x_t | x_{t-1}) follows a time-dependent Poisson rate process
-    with rate decay lambda_t = lambda_0 * exp(-gamma * t).
-    """
     def __init__(self, T: int = 40, scale: float = 20.0, decay: float = 0.05, device: str = "cuda"):
         self.T = T
         self.scale = scale
@@ -16,9 +11,6 @@ class PoissonAudioDiffusion:
         self.gamma = torch.exp(-decay * self.t_steps * 6.0)
 
     def q_sample(self, x0: torch.Tensor, t: torch.Tensor, mode: str = "poisson"):
-        """
-        Calculates q(x_t | x_0) directly via integrated Poisson rate or noise substitution.
-        """
         t_normalized = (t.float() / self.T).unsqueeze(-1)
         gamma_t = torch.exp(-self.decay * t_normalized * 6.0).to(self.device)
         
@@ -43,12 +35,7 @@ class PoissonAudioDiffusion:
         target_noise = x_t - x0
         return x_t, target_noise
 
-
 def poison(x0: torch.Tensor, t: torch.Tensor, T_audio: int, max_rate: float,
            device: str, scale: float = 20.0, decay: float = 0.05, jitter_std: float = 0.02):
-    """
-    Wrapper function to maintain backward compatibility with legacy scripts
-    expecting the 'poison' module import.
-    """
     diff = PoissonAudioDiffusion(T=T_audio, scale=scale, decay=decay, device=device)
     return diff.q_sample(x0, t, mode="poisson")
