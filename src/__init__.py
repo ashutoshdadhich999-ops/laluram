@@ -1,4 +1,3 @@
-"""
-Spiking vs Non-Spiking Diffusion Framework for Neuromorphic Research.
-"""
-__version__ = "2.0.0-PhD"
+"""Neuromorphic Spiking vs Non-Spiking Diffusion Framework."""
+
+__version__ = "2.0.0"
