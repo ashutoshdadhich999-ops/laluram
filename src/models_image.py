@@ -1,7 +1,5 @@
 """
-Image branch models: a spiking (SNN) residual denoiser and a matched
-non-spiking (ANN) baseline with an identical parameter budget / topology,
-used for a controlled ablation.
+Image branch models: Spiking (SNN) and Matched Non-Spiking (ANN) baselines.
 """
 
 import torch
@@ -13,9 +11,6 @@ from src.diffusion_image import TimeEmb
 
 
 class ResBlock(nn.Module):
-    """Spiking residual block (LIF neurons) with a small internal
-    unroll (`num_steps`) to obtain a rate-coded output."""
-
     def __init__(self, in_ch: int, out_ch: int, time_dim: int, num_steps: int):
         super().__init__()
         self.num_steps = num_steps
@@ -33,11 +28,11 @@ class ResBlock(nn.Module):
         mem2 = self.lif2.init_leaky()
         res = self.skip(x)
         h = self.norm1(self.conv1(x))
-        temb = self.time_proj(t_emb)[:, :, None, None]  # computed once, not per-step
+        temb = self.time_proj(t_emb)[:, :, None, None]
 
         outs = []
         for _ in range(self.num_steps):
-            h_in = h + temb  # constant drive per step; LIF membrane state evolves internally
+            h_in = h + temb
             spk, mem1 = self.lif1(h_in, mem1)
             h2 = self.norm2(self.conv2(spk))
             spk2, mem2 = self.lif2(h2, mem2)
@@ -46,8 +41,6 @@ class ResBlock(nn.Module):
 
 
 class NonSpikeResBlock(nn.Module):
-    """Non-spiking counterpart of ResBlock (SiLU activations instead of LIF)."""
-
     def __init__(self, in_ch: int, out_ch: int, time_dim: int):
         super().__init__()
         self.time_proj = nn.Linear(time_dim, out_ch)
@@ -69,8 +62,6 @@ class NonSpikeResBlock(nn.Module):
 
 
 class StrongImgNet(nn.Module):
-    """Spiking image denoiser."""
-
     def __init__(self, base_channels: int = 32, num_steps: int = 5, time_dim: int = 64):
         super().__init__()
         self.time_mlp = nn.Sequential(
@@ -93,8 +84,6 @@ class StrongImgNet(nn.Module):
 
 
 class NonSpikeImgNet(nn.Module):
-    """Non-spiking (ANN) image denoiser, matched topology to StrongImgNet."""
-
     def __init__(self, base_channels: int = 32, time_dim: int = 64):
         super().__init__()
         self.time_mlp = nn.Sequential(
