@@ -1,4 +1,4 @@
-"""Training loops for the image and audio denoisers."""
+"""Training routines for image and audio denoisers."""
 
 import torch
 import torch.nn.functional as F
@@ -32,17 +32,17 @@ def train_img_model(model, name, train_loader, diff, timesteps, epochs, lr, devi
     return model
 
 
-def train_audio_model(model, name, train_loader, T_audio, max_rate, epochs, lr, device):
+def train_audio_model(model, name, train_loader, T_audio, max_rate, epochs, lr, device, mode="poisson"):
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
-    print(f"\nTraining {name}...")
+    print(f"\nTraining {name} [{mode}]...")
     for ep in range(epochs):
         model.train()
         total = 0.0
         for x0 in tqdm(train_loader, leave=False, desc=f"{name} Ep {ep + 1}"):
             x0 = x0.to(device)
             t = torch.randint(0, T_audio, (x0.size(0),), device=device)
-            noisy, target = poison(x0, t, T_audio, max_rate, device)
+            noisy, target = poison(x0, t, T_audio, max_rate, device, mode=mode)
             pred = model(noisy, t)
             loss = F.mse_loss(pred, target)
 
