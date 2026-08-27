@@ -75,7 +75,7 @@ def run_audio_branch_multi_seed(args, device):
                               batch_size=args.batch_size_audio, shuffle=False,
                               num_workers=2, pin_memory=True)
 
-    if args.use_continuous-snn:
+    if args.use_continuous_snn:
         model_a = ContinuousSpikeAudioNet(num_steps=args.num_steps_audio, T_audio=args.timesteps_audio).to(device)
     else:
         model_a = StrongAudioNet(num_steps=args.num_steps_audio, T_audio=args.timesteps_audio).to(device)
@@ -113,7 +113,7 @@ def run_audio_branch_multi_seed(args, device):
     plot_temporal_denoising(model_a, test_loader, args.timesteps_audio, args.max_rate_audio, device, fig_dir)
 
     # Optional Encoding Ablation (Poisson vs Gaussian vs Bernoulli)
-    if args.run_encoding-ablation:
+    if args.run_encoding_ablation:
         print("\n--- Running Encoding Justification Ablation ---")
         for mode in ["gaussian", "bernoulli"]:
             train_audio_model(model_a, f"Spiking-{mode}", train_loader, args.timesteps_audio, args.max_rate_audio, 3, args.lr_audio, device, mode=mode)
