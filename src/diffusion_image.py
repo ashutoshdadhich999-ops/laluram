@@ -9,15 +9,7 @@ import torch.nn as nn
 
 
 class Diffusion:
-    """Standard DDPM-style forward (noising) process.
-
-    x_t = sqrt(alpha_bar_t) * x0 + sqrt(1 - alpha_bar_t) * noise
-
-    Note: `T` must always be passed explicitly and match the number of
-    diffusion timesteps used elsewhere in the pipeline (e.g. TIMESTEPS
-    in main.py). Relying on the constructor default is fragile if that
-    constant ever changes.
-    """
+    """Standard DDPM-style forward (noising) process."""
 
     def __init__(self, T: int, device: str = "cuda"):
         self.T = T
@@ -34,7 +26,7 @@ class Diffusion:
 
 
 class TimeEmb(nn.Module):
-    """Sinusoidal timestep embedding (as in standard DDPM implementations)."""
+    """Sinusoidal timestep embedding."""
 
     def __init__(self, dim: int):
         super().__init__()
